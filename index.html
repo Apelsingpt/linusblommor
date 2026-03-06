@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Blomigenkänning – Linus H TE23D</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --cream: #f5f0e8;
+      --dark: #1a1a14;
+      --green: #3a5c2e;
+      --green-light: #6a9c5a;
+      --accent: #c8a96e;
+      --red: #c0392b;
+      --white: #fdfcf8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--cream);
+      color: var(--dark);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background botanical decoration */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -80px; right: -80px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(106,156,90,0.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -80px; left: -80px;
+      width: 350px; height: 350px;
+      background: radial-gradient(circle, rgba(200,169,110,0.1) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 48px 24px;
+      border-bottom: 1.5px solid rgba(58,92,46,0.18);
+    }
+
+    .header-left h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--green);
+      line-height: 1.1;
+    }
+    .header-left h1 span {
+      font-style: italic;
+      font-weight: 400;
+      color: var(--accent);
+    }
+    .header-left p {
+      font-size: 0.7rem;
+      color: #888;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .author-badge {
+      background: var(--green);
+      color: var(--cream);
+      padding: 10px 20px;
+      border-radius: 2px;
+      text-align: right;
+    }
+    .author-badge .name {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .author-badge .klass {
+      font-size: 0.65rem;
+      opacity: 0.7;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+    }
+
+    /* STATUS BOX */
+    .status-box {
+      grid-column: 1 / -1;
+      border: 1.5px solid var(--green-light);
+      background: var(--white);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-radius: 2px;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .status-indicator {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #ccc;
+      flex-shrink: 0;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .status-indicator.loading {
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(200,169,110,0.25);
+      animation: pulse 1.2s infinite;
+    }
+    .status-indicator.ready {
+      background: var(--green-light);
+      box-shadow: 0 0 0 3px rgba(106,156,90,0.25);
+    }
+    .status-indicator.error {
+      background: var(--red);
+      box-shadow: 0 0 0 3px rgba(192,57,43,0.2);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-text {
+      flex: 1;
+    }
+    .status-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 2px;
+    }
+    .status-message {
+      font-size: 0.85rem;
+      color: var(--dark);
+      font-weight: 500;
+    }
+
+    .status-tag {
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 2px;
+      background: #eee;
+      color: #666;
+      transition: all 0.3s;
+    }
+    .status-tag.ready { background: rgba(106,156,90,0.15); color: var(--green); }
+    .status-tag.loading { background: rgba(200,169,110,0.15); color: #8a6a20; }
+    .status-tag.error { background: rgba(192,57,43,0.1); color: var(--red); }
+
+    /* UPLOAD PANEL */
+    .upload-panel {
+      background: var(--white);
+      border: 1.5px solid rgba(58,92,46,0.15);
+      border-radius: 2px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      animation: fadeIn 0.6s ease 0.1s both;
+    }
+
+    .panel-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    .drop-zone {
+      border: 2px dashed rgba(58,92,46,0.3);
+      border-radius: 2px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(245,240,232,0.5);
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--green-light);
+      background: rgba(106,156,90,0.06);
+    }
+
+    .drop-icon {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      display: block;
+    }
+    .drop-label {
+      font-size: 0.75rem;
+      color: #888;
+      letter-spacing: 0.08em;
+    }
+    .drop-label strong {
+      color: var(--green);
+    }
+
+    #fileInput { display: none; }
+
+    .preview-wrap {
+      position: relative;
+      border-radius: 2px;
+      overflow: hidden;
+      background: #eee;
+      aspect-ratio: 1;
+      display: none;
+    }
+    .preview-wrap.visible { display: block; }
+    #preview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .btn-analyze {
+      background: var(--green);
+      color: var(--cream);
+      border: none;
+      padding: 14px 24px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: background 0.2s, transform 0.1s;
+      display: none;
+    }
+    .btn-analyze.visible { display: block; }
+    .btn-analyze:hover { background: var(--green-light); }
+    .btn-analyze:active { transform: scale(0.98); }
+    .btn-analyze:disabled {
+      background: #bbb;
+      cursor: not-allowed;
+    }
+
+    /* RESULT PANEL */
+    .result-panel {
+      background: var(--white);
+      border: 1.5px solid rgba(58,92,46,0.15);
+      border-radius: 2px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      animation: fadeIn 0.6s ease 0.2s both;
+    }
+
+    .result-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #bbb;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-align: center;
+      gap: 10px;
+      min-height: 180px;
+    }
+    .result-empty span { font-size: 2rem; }
+
+    .top-result {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .top-result.visible { display: flex; }
+
+    .flower-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--green);
+      line-height: 1;
+      text-transform: capitalize;
+    }
+    .flower-name em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .confidence-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .conf-bar-wrap {
+      flex: 1;
+      height: 6px;
+      background: rgba(58,92,46,0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .conf-bar {
+      height: 100%;
+      background: var(--green-light);
+      border-radius: 3px;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      width: 0%;
+    }
+    .conf-pct {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--green);
+      min-width: 42px;
+      text-align: right;
+    }
+
+    .all-scores {
+      border-top: 1px solid rgba(58,92,46,0.1);
+      padding-top: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .all-scores.visible { display: flex; }
+
+    .score-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+
+    .score-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .score-flower {
+      width: 80px;
+      font-size: 0.7rem;
+      text-transform: capitalize;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .score-bar-wrap {
+      flex: 1;
+      height: 4px;
+      background: rgba(58,92,46,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .score-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1) var(--delay, 0s);
+      width: 0%;
+    }
+    .score-row.top .score-bar { background: var(--green-light); }
+    .score-pct {
+      font-size: 0.68rem;
+      color: #999;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    footer {
+      position: relative; z-index: 1;
+      text-align: center;
+      padding: 20px;
+      font-size: 0.62rem;
+      color: #bbb;
+      letter-spacing: 0.1em;
+      border-top: 1px solid rgba(58,92,46,0.1);
+    }
+
+    @media (max-width: 600px) {
+      header { flex-direction: column; gap: 16px; padding: 20px; }
+      main { grid-template-columns: 1fr; padding: 20px 16px; }
+      .status-box { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>Blomigenkänning <span>/ Flower AI</span></h1>
+    <p>MobileNetV2 · TensorFlow.js · 5 klasser</p>
+  </div>
+  <div class="author-badge">
+    <div class="name">Linus H</div>
+    <div class="klass">TE23D</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- STATUS BOX -->
+  <div class="status-box">
+    <div class="status-indicator" id="statusDot"></div>
+    <div class="status-text">
+      <div class="status-label">Modellstatus</div>
+      <div class="status-message" id="statusMsg">Laddar modell från GitHub…</div>
+    </div>
+    <div class="status-tag loading" id="statusTag">Laddar</div>
+  </div>
+
+  <!-- UPLOAD PANEL -->
+  <div class="upload-panel">
+    <div class="panel-title">Ladda upp en bild</div>
+
+    <div class="drop-zone" id="dropZone">
+      <span class="drop-icon">🌸</span>
+      <div class="drop-label"><strong>Klicka</strong> eller dra en bild hit</div>
+      <div class="drop-label" style="margin-top:4px; font-size:0.62rem;">JPG, PNG, WEBP</div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*"/>
+
+    <div class="preview-wrap" id="previewWrap">
+      <img id="preview" alt="Förhandsvisning"/>
+    </div>
+
+    <button class="btn-analyze" id="btnAnalyze">Analysera blomma</button>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div class="result-panel">
+    <div class="panel-title">Resultat</div>
+
+    <div class="result-empty" id="resultEmpty">
+      <span>🌿</span>
+      Ladda upp en bild för att se klassificering
+    </div>
+
+    <div class="top-result" id="topResult">
+      <div style="font-size:0.62rem;letter-spacing:0.18em;text-transform:uppercase;color:#aaa;">Identifierad blomma</div>
+      <div class="flower-name" id="flowerName">—</div>
+      <div class="confidence-row">
+        <div class="conf-bar-wrap">
+          <div class="conf-bar" id="confBar"></div>
+        </div>
+        <div class="conf-pct" id="confPct">—</div>
+      </div>
+    </div>
+
+    <div class="all-scores" id="allScores">
+      <div class="score-label">Alla sannolikheter</div>
+      <div id="scoreRows"></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>Skapat av Linus H · TE23D · MobileNetV2 blomklassificerare</footer>
+
+<script>
+  const CLASS_NAMES = ['Daisy', 'Dandelion', 'Rose', 'Sunflower', 'Tulip'];
+  const MODEL_URL = 'tfjs_model/model.json';
+
+  // Swedish translations
+  const SV = {
+    'Daisy': 'Prästkrage',
+    'Dandelion': 'Maskros',
+    'Rose': 'Ros',
+    'Sunflower': 'Solros',
+    'Tulip': 'Tulpan'
+  };
+
+  let model = null;
+
+  const statusDot = document.getElementById('statusDot');
+  const statusMsg = document.getElementById('statusMsg');
+  const statusTag = document.getElementById('statusTag');
+
+  function setStatus(state, msg) {
+    statusDot.className = 'status-indicator ' + state;
+    statusTag.className = 'status-tag ' + state;
+    statusMsg.textContent = msg;
+    const labels = { loading: 'Laddar', ready: 'Redo', error: 'Fel' };
+    statusTag.textContent = labels[state] || state;
+  }
+
+  async function loadModel() {
+    setStatus('loading', 'Laddar modell från GitHub (tfjs_model/model.json)…');
+    try {
+      model = await tf.loadLayersModel(MODEL_URL);
+      // Warm up
+      const dummy = tf.zeros([1, 224, 224, 3]);
+      await model.predict(dummy).data();
+      dummy.dispose();
+      setStatus('ready', 'Modellen är laddad och redo att klassificera blommor ✓');
+    } catch (e) {
+      setStatus('error', 'Kunde inte ladda modellen. Kontrollera att tfjs_model/ finns på GitHub. (' + e.message + ')');
+    }
+  }
+
+  // Drop zone
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const preview = document.getElementById('preview');
+  const previewWrap = document.getElementById('previewWrap');
+  const btnAnalyze = document.getElementById('btnAnalyze');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      preview.src = ev.target.result;
+      previewWrap.classList.add('visible');
+      btnAnalyze.classList.add('visible');
+      clearResults();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearResults() {
+    document.getElementById('resultEmpty').style.display = 'flex';
+    document.getElementById('topResult').classList.remove('visible');
+    document.getElementById('allScores').classList.remove('visible');
+    document.getElementById('confBar').style.width = '0%';
+  }
+
+  btnAnalyze.addEventListener('click', async () => {
+    if (!model) {
+      setStatus('error', 'Modellen är inte laddad ännu. Vänta eller ladda om sidan.');
+      return;
+    }
+    btnAnalyze.disabled = true;
+    btnAnalyze.textContent = 'Analyserar…';
+
+    try {
+      const tensor = tf.tidy(() => {
+        return tf.browser.fromPixels(preview)
+          .resizeBilinear([224, 224])
+          .toFloat()
+          .div(tf.scalar(255))
+          .expandDims(0);
+      });
+
+      const predictions = await model.predict(tensor).data();
+      tensor.dispose();
+
+      const scores = Array.from(predictions);
+      const indexed = scores.map((s, i) => ({ name: CLASS_NAMES[i], score: s }))
+                            .sort((a, b) => b.score - a.score);
+
+      showResults(indexed);
+    } catch(e) {
+      setStatus('error', 'Fel vid analys: ' + e.message);
+    }
+
+    btnAnalyze.disabled = false;
+    btnAnalyze.textContent = 'Analysera blomma';
+  });
+
+  function showResults(sorted) {
+    document.getElementById('resultEmpty').style.display = 'none';
+
+    const top = sorted[0];
+    const sv = SV[top.name] || top.name;
+    document.getElementById('flowerName').innerHTML = sv + ' <em>/ ' + top.name + '</em>';
+    document.getElementById('topResult').classList.add('visible');
+
+    const pct = Math.round(top.score * 100);
+    document.getElementById('confPct').textContent = pct + '%';
+    setTimeout(() => {
+      document.getElementById('confBar').style.width = pct + '%';
+    }, 50);
+
+    // All scores
+    const rowsEl = document.getElementById('scoreRows');
+    rowsEl.innerHTML = '';
+    sorted.forEach((item, i) => {
+      const p = Math.round(item.score * 100);
+      const row = document.createElement('div');
+      row.className = 'score-row' + (i === 0 ? ' top' : '');
+      row.innerHTML = `
+        <div class="score-flower">${SV[item.name] || item.name}</div>
+        <div class="score-bar-wrap">
+          <div class="score-bar" style="--delay:${i * 0.08}s"></div>
+        </div>
+        <div class="score-pct">${p}%</div>
+      `;
+      rowsEl.appendChild(row);
+      setTimeout(() => {
+        row.querySelector('.score-bar').style.width = p + '%';
+      }, 100 + i * 80);
+    });
+
+    document.getElementById('allScores').classList.add('visible');
+  }
+
+  loadModel();
+</script>
+</body>
+</html>
